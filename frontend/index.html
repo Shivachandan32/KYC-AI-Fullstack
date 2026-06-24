@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KYC-AI Document Verification</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f0f4f8;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        h1 { color: #1a202c; margin-bottom: 8px; }
+        .subtitle { color: #718096; margin-bottom: 32px; font-size: 14px; }
+
+        .upload-area {
+            border: 2px dashed #cbd5e0;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+        }
+        .upload-area:hover { border-color: #4299e1; background: #ebf8ff; }
+        .upload-area input { display: none; }
+        .upload-icon { font-size: 40px; margin-bottom: 12px; }
+        .upload-text { color: #4a5568; }
+
+        button {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background 0.2s;
+        }
+        button:hover { background: #3182ce; }
+        button:disabled { background: #a0aec0; cursor: not-allowed; }
+
+        .result-card {
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 16px;
+        }
+        .verified { background: #f0fff4; border: 1px solid #68d391; }
+        .flagged  { background: #fff5f5; border: 1px solid #fc8181; }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 12px;
+        }
+        .badge-verified { background: #68d391; color: #1a472a; }
+        .badge-flagged  { background: #fc8181; color: #63171b; }
+
+        .detail-row { margin-top: 12px; font-size: 14px; }
+        .detail-label { font-weight: 600; color: #4a5568; }
+        .issues-list { margin-top: 8px; padding-left: 20px; }
+        .issues-list li { color: #c53030; margin-bottom: 4px; }
+
+        .explanation-box {
+            background: #fffaf0;
+            border: 1px solid #f6ad55;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 16px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #744210;
+        }
+        .rules-box {
+            background: #e8f4f8;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+        .rules-box h4 { margin-bottom: 8px; color: #2c5282; }
+        .rule-item {
+            margin-bottom: 6px;
+            padding-left: 12px;
+            border-left: 3px solid #4299e1;
+            color: #2d3748;
+        }
+        .loading { text-align: center; color: #718096; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 KYC-AI Verification</h1>
+        <p class="subtitle">Upload an identity document for instant AI-powered verification</p>
+
+        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">📄</div>
+            <p class="upload-text">Click to upload or drag & drop</p>
+            <p style="font-size:12px; color:#a0aec0; margin-top:8px">JPG, PNG, PDF — Max 5MB</p>
+            <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.pdf"
+                   onchange="handleFileSelect(event)">
+        </div>
+
+        <p id="fileName" style="color:#4a5568; font-size:14px; margin-bottom:16px; text-align:center;"></p>
+
+        <button id="verifyBtn" onclick="verifyDocument()" disabled>
+            Verify Document
+        </button>
+
+        <div id="statusArea"></div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+
+        function handleFileSelect(event) {
+            selectedFile = event.target.files[0];
+            if (selectedFile) {
+                document.getElementById('fileName').textContent = `Selected: ${selectedFile.name}`;
+                document.getElementById('verifyBtn').disabled = false;
+            }
+        }
+
+        async function verifyDocument() {
+            if (!selectedFile) return;
+
+            const btn = document.getElementById('verifyBtn');
+            const statusArea = document.getElementById('statusArea');
+
+            btn.disabled = true;
+            btn.textContent = 'Analyzing...';
+            statusArea.innerHTML = '<div class="loading">🤖 AI is analyzing your document...<br><small>This may take 5-10 seconds</small></div>';
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                const response = await fetch('http://localhost:8000/verify-document', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayResult(data.result);
+                } else {
+                    statusArea.innerHTML = `<div class="result-card flagged">❌ Error: ${data.detail}</div>`;
+                }
+            } catch (error) {
+                statusArea.innerHTML = `<div class="result-card flagged">❌ Connection error. Is the backend running?</div>`;
+                console.error(error);
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Verify Document';
+        }
+
+        function displayResult(result) {
+            const isVerified = result.status === 'VERIFIED';
+            const cardClass  = isVerified ? 'verified' : 'flagged';
+            const badgeClass = isVerified ? 'badge-verified' : 'badge-flagged';
+            const icon       = isVerified ? '✅' : '⚠️';
+
+            let html = `
+                <div class="result-card ${cardClass}">
+                    <span class="badge ${badgeClass}">${icon} ${result.status}</span>
+                    <div class="detail-row">
+                        <span class="detail-label">Document Type:</span> ${result.document_type}
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Confidence:</span> ${result.confidence}
+                    </div>`;
+
+            if (!isVerified && result.issues.length > 0) {
+                html += `
+                    <div class="detail-row">
+                        <span class="detail-label">Issues Found:</span>
+                        <ul class="issues-list">
+                            ${result.issues.map(i => `<li>${i}</li>`).join('')}
+                        </ul>
+                    </div>`;
+            }
+
+            if (result.explanation) {
+                html += `
+                    <div class="explanation-box">
+                        <strong>📋 Explanation:</strong><br><br>
+                        ${result.explanation}
+                    </div>`;
+            }
+
+            if (result.rules_applied && result.rules_applied.length > 0) {
+                html += `
+                    <div class="rules-box">
+                        <h4>📚 Compliance Rules Applied (via RAG)</h4>
+                        ${result.rules_applied.map(r => `<div class="rule-item">${r}</div>`).join('')}
+                    </div>`;
+            }
+
+            html += `</div>`;
+            document.getElementById('statusArea').innerHTML = html;
+        }
+
+        // Drag and drop support
+        const uploadArea = document.querySelector('.upload-area');
+        uploadArea.addEventListener('dragover', e => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#4299e1';
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.borderColor = '#cbd5e0';
+        });
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#cbd5e0';
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                selectedFile = file;
+                document.getElementById('fileName').textContent = `Selected: ${file.name}`;
+                document.getElementById('verifyBtn').disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
